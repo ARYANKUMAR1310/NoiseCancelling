@@ -1,0 +1,83 @@
+clc; clear; close all;
+
+%% Audio Recording Settings
+Fs = 44100;
+nBits = 16;
+nChannels = 1; 
+recTime = 5; 
+
+disp('Recording clean speech...');
+recObj = audiorecorder(Fs, nBits, nChannels);
+recordblocking(recObj, recTime);
+disp('Recording complete.');
+
+cleanSpeech = getaudiodata(recObj);
+
+%% Add White Gaussian Noise
+noiseAmp = 0.2;
+noise = noiseAmp * randn(size(cleanSpeech));
+noisySignal = cleanSpeech + noise;
+
+%% Adaptive LMS Filter Parameters
+mu = 0.01;
+nTaps = 32;
+lms = dsp.LMSFilter('Length', nTaps, 'StepSize', mu);
+
+%% Apply LMS Filtering (real-time simulation: frame-wise)
+frameSize = 1024;
+nFrames = floor(length(noisySignal)/frameSize);
+filteredSignal = zeros(size(noisySignal));
+
+for i = 1:nFrames
+    idx = (i-1)*frameSize + 1 : i*frameSize;
+    [~, err] = lms(noise(idx), noisySignal(idx));
+    filteredSignal(idx) = err;
+end
+
+%% Time Vector
+t = (0:length(cleanSpeech)-1)/Fs;
+
+%% Plot Signals
+figure('Name','Noise Cancellation Results','NumberTitle','off');
+
+subplot(3,1,1);
+plot(t, cleanSpeech); title('Original Clean Speech');
+xlabel('Time (s)'); ylabel('Amplitude');
+
+subplot(3,1,2);
+plot(t, noisySignal); title('Noisy Signal');
+xlabel('Time (s)'); ylabel('Amplitude');
+
+subplot(3,1,3);
+plot(t, filteredSignal); title('Filtered Signal using LMS');
+xlabel('Time (s)'); ylabel('Amplitude');
+
+%% Show Spectrograms for Visual Analysis
+figure('Name','Spectrogram Comparison','NumberTitle','off');
+subplot(3,1,1);
+spectrogram(cleanSpeech, 256, [], [], Fs, 'yaxis'); title('Clean Speech');
+
+subplot(3,1,2);
+spectrogram(noisySignal, 256, [], [], Fs, 'yaxis'); title('Noisy Signal');
+
+subplot(3,1,3);
+spectrogram(filteredSignal, 256, [], [], Fs, 'yaxis'); title('Filtered Signal');
+
+%% Playback
+disp('Playing original clean speech...');
+sound(cleanSpeech, Fs);
+pause(recTime + 1);
+
+disp('Playing noisy speech...');
+sound(noisySignal, Fs);
+pause(recTime + 1);
+
+disp('Playing filtered speech...');
+sound(filteredSignal, Fs);
+
+%% Save Results
+audiowrite('original_clean.wav', cleanSpeech, Fs);
+audiowrite('noisy_signal.wav', noisySignal, Fs);
+audiowrite('filtered_signal.wav', filteredSignal, Fs);
+
+disp('Audio saved. Noise cancellation complete.');
